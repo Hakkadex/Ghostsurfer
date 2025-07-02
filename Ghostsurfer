@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+
+import sys, os, subprocess, requests
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse
+
+VIDEO_SITES = [
+    "youtube.com", "youtu.be", "wcostream", "bitchute.com", "rumble.com",
+    "vimeo.com", "dailymotion.com", "odysee.com"
+]
+
+def is_video_site(url):
+    return any(site in url for site in VIDEO_SITES)
+
+def play_video(url):
+    print(f"\n[🎥] Streaming video from {url} via yt-dlp + mpv...\n")
+    try:
+        subprocess.run(["mpv", url])
+    except Exception as e:
+        print(f"[💀] Video playback failed: {e}")
+
+def clean_html(html):
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Delete cookie popups and consent banners
+    for tag in soup.find_all(["div", "section", "aside", "footer"], class_=lambda x: x and "cookie" in x.lower()):
+        tag.decompose()
+
+    # Kill JS, noscript, ads
+    [t.extract() for t in soup(["script", "noscript", "style", "iframe", "footer", "nav"])]
+
+    return str(soup)
+
+def fetch_and_display(url):
+    headers = {
+        "User-Agent": "GhostSurfer/3.0 (NoCookies, NoJS, NoBS)",
+        "Accept-Language": "en-US,en;q=0.8"
+    }
+    try:
+        print(f"\n[📡] Fetching and sanitizing: {url}\n")
+        resp = requests.get(url, headers=headers, timeout=10)
+        html = clean_html(resp.text)
+        with open("/tmp/ghost.html", "w") as f:
+            f.write(html)
+        os.system("w3m /tmp/ghost.html")
+    except Exception as e:
+        print(f"[💀] Failed to load site: {e}")
+
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: ghostsurfer <url>")
+        sys.exit(1)
+
+    url = sys.argv[1]
+
+    if not url.startswith("http"):
+        url = "https://" + url
+
+    if is_video_site(url):
+        play_video(url)
+    else:
+        fetch_and_display(url)
+
+if __name__ == "__main__":
+    main()
